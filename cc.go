@@ -1,6 +1,7 @@
 package cc
 
 import "sync"
+import "github.com/fluxio/multierror"
 
 // Pool manages a pool of concurrent workers. It works a bit like a Waitgroup, but with error reporting and concurrency limits
 // You create one with New, and run functions with Run. Then you wait on it like a regular WaitGroup.
@@ -18,7 +19,7 @@ import "sync"
 //
 //   }
 type Pool struct {
-	errors chan error
+	errors multierror.ConcurrentAccumulator
 
 	semaphore chan bool
 	wg        *sync.WaitGroup
@@ -28,7 +29,7 @@ type Pool struct {
 func New(concurrency int) *Pool {
 	wg := sync.WaitGroup{}
 	p := Pool{
-		errors:    make(chan error),
+		errors:    multierror.ConcurrentAccumulator{},
 		semaphore: make(chan bool, concurrency),
 		wg:        &wg,
 	}
@@ -37,23 +38,11 @@ func New(concurrency int) *Pool {
 
 // Wait blocks and ensures that the channels are closed when all the goroutines end.
 // It returns a list of all the errors returned by the goroutine
-func (p *Pool) Wait() []error {
-	go func() {
-		p.wg.Wait()
+func (p *Pool) Wait() error {
+	p.wg.Wait()
+	close(p.semaphore)
 
-		close(p.semaphore)
-		close(p.errors)
-	}()
-
-	errs := []error{}
-
-	for err := range p.errors {
-		if err != nil {
-			errs = append(errs, err)
-		}
-	}
-
-	return errs
+	return p.errors.Error()
 }
 
 // Run wraps the given function into a goroutine and ensure that the concurrency limits are respected.
@@ -62,7 +51,7 @@ func (p *Pool) Run(fn func() error) {
 	p.wg.Add(1)
 	go func() {
 		p.semaphore <- true
-		p.errors <- fn()
+		p.errors.Push(fn())
 		<-p.semaphore
 		p.wg.Done()
 	}()

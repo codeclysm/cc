@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/codeclysm/cc"
 )
@@ -11,6 +12,7 @@ import (
 func Example() {
 	p := cc.New(4)
 	p.Run(func() error {
+		time.Sleep(1 * time.Second)
 		return errors.New("fail1")
 	})
 	p.Run(func() error {
@@ -21,8 +23,10 @@ func Example() {
 	})
 
 	errs := p.Wait()
-	fmt.Println(len(errs))
-	// Output: 2
+	fmt.Println(errs)
+	// Output: 2 errors:
+	//:   fail2
+	//:   fail1
 }
 
 func TestRace(t *testing.T) {
