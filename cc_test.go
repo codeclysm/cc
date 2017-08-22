@@ -9,7 +9,7 @@ import (
 	"github.com/codeclysm/cc"
 )
 
-func Example() {
+func ExamplePool() {
 	p := cc.New(4)
 	p.Run(func() error {
 		time.Sleep(1 * time.Second)

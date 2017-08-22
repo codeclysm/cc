@@ -8,19 +8,6 @@ import (
 
 // Pool manages a pool of concurrent workers. It works a bit like a Waitgroup, but with error reporting and concurrency limits
 // You create one with New, and run functions with Run. Then you wait on it like a regular WaitGroup.
-//
-// Example:
-//
-//   p := cc.New(4)
-//   p.Run(func() error {
-//		 afunction()
-//       return nil
-//   })
-//   errs := p.Wait()
-//
-//   for err := range errs {
-//
-//   }
 type Pool struct {
 	errors multierror.ConcurrentAccumulator
 
