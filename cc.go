@@ -1,7 +1,10 @@
 package cc
 
-import "sync"
-import "github.com/fluxio/multierror"
+import (
+	"sync"
+
+	"github.com/fluxio/multierror"
+)
 
 // Pool manages a pool of concurrent workers. It works a bit like a Waitgroup, but with error reporting and concurrency limits
 // You create one with New, and run functions with Run. Then you wait on it like a regular WaitGroup.
@@ -55,4 +58,35 @@ func (p *Pool) Run(fn func() error) {
 		<-p.semaphore
 		p.wg.Done()
 	}()
+}
+
+// Stoppable is a function that can be stopped with the method Stop. You can also listen on the Stopped channel to see when it has been stopped.
+// Stoppable is different from a context cancelation because it waits until the function has cleaned up before broadcasting on the Stopped channel
+type Stoppable struct {
+	Stopped chan struct{}
+	stop    chan struct{}
+	once    sync.Once
+}
+
+// Stop signals the provided function that it needs to stop
+func (s *Stoppable) Stop() {
+	s.once.Do(func() {
+		close(s.stop)
+	})
+}
+
+// Run creates a new stoppable function from the provided func. When you call the Stop method on the returned Stoppable the stop channel fed to the provided func is closed,
+// signaling the need to stop. When the provided func returns the Stopped channel on the
+// returned Stoppable is closed as well, broadcasting the message that it has finished
+func Run(fn func(stop chan struct{})) (s *Stoppable) {
+	s = &Stoppable{
+		Stopped: make(chan struct{}),
+		stop:    make(chan struct{}),
+	}
+
+	go func() {
+		fn(s.stop)
+		close(s.Stopped)
+	}()
+	return s
 }

@@ -29,6 +29,43 @@ func Example() {
 	//:   fail1
 }
 
+func ExampleStoppable() {
+	stoppable := cc.Run(func(stop chan struct{}) {
+		i := 0
+	L:
+		for {
+			select {
+			case <-stop:
+				fmt.Println("receive stop signal")
+				break L
+			default:
+				i++
+				time.Sleep(250 * time.Millisecond)
+				fmt.Println(i)
+			}
+		}
+		fmt.Println("finished with", i)
+	})
+
+	go func() {
+		time.Sleep(1 * time.Second)
+		fmt.Println("send stop signal")
+		stoppable.Stop()
+		stoppable.Stop() // It shouldn't explode even if you attempt to close it multiple times
+	}()
+
+	<-stoppable.Stopped
+	fmt.Println("stopped finally")
+	// Output: 1
+	// 2
+	// 3
+	// send stop signal
+	// 4
+	// receive stop signal
+	// finished with 4
+	// stopped finally
+}
+
 func TestRace(t *testing.T) {
 	p := cc.New(4)
 
@@ -39,4 +76,17 @@ func TestRace(t *testing.T) {
 	}
 
 	p.Wait()
+}
+
+func Benchmark(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		p := cc.New(4)
+		for i := 0; i < 1000; i++ {
+			p.Run(func() error {
+				time.Sleep(1 * time.Millisecond)
+				return nil
+			})
+		}
+		p.Wait()
+	}
 }
