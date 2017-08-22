@@ -47,6 +47,10 @@ func (p *Pool) Run(fn func() error) {
 	}()
 }
 
+// StoppableFunc is a func that receives a stop channel that when closed broadcasts the
+// need to wrap up and stop the function
+type StoppableFunc func(stop chan struct{})
+
 // Stoppable is a function that can be stopped with the method Stop. You can also listen on the Stopped channel to see when it has been stopped.
 // Stoppable is different from a context cancelation because it waits until the function has cleaned up before broadcasting on the Stopped channel
 type Stoppable struct {
@@ -62,18 +66,34 @@ func (s *Stoppable) Stop() {
 	})
 }
 
-// Run creates a new stoppable function from the provided func. When you call the Stop method on the returned Stoppable the stop channel fed to the provided func is closed,
-// signaling the need to stop. When the provided func returns the Stopped channel on the
+// Run creates a new stoppable function from the provided funcs. When you call the Stop method on the returned Stoppable the stop channel fed to the provided funcs is closed,
+// signaling the need to stop. When all the provided func return the Stopped channel on the
 // returned Stoppable is closed as well, broadcasting the message that it has finished
-func Run(fn func(stop chan struct{})) (s *Stoppable) {
+func Run(fns ...StoppableFunc) (s *Stoppable) {
 	s = &Stoppable{
 		Stopped: make(chan struct{}),
 		stop:    make(chan struct{}),
 	}
 
+	stoppedList := []chan struct{}{}
+
+	for _, fn := range fns {
+		stopped := make(chan struct{})
+		stoppedList = append(stoppedList, stopped)
+
+		go func(fn StoppableFunc, stopped chan struct{}) {
+			fn(s.stop)
+			s.Stop()
+			close(stopped)
+		}(fn, stopped)
+	}
+
 	go func() {
-		fn(s.stop)
+		for _, stopped := range stoppedList {
+			<-stopped
+		}
 		close(s.Stopped)
 	}()
+
 	return s
 }
